@@ -61,14 +61,14 @@
                 <label for="start" class="form-label">開始月份</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
-                    <input type="month" class="form-control" id="start" required min="2020-01" max="2025-12" />
+                    <select id="start" class="form-select" required></select>
                 </div>
             </div>
             <div class="col-md-4">
                 <label for="end" class="form-label">結束月份</label>
                 <div class="input-group">
                     <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
-                    <input type="month" class="form-control" id="end" required min="2020-01" max="2025-12" />
+                    <select id="end" class="form-select" required></select>
                 </div>
             </div>
             <div class="col-md-3 text-center">
@@ -83,7 +83,7 @@
         <form id="addForm" class="row g-3 align-items-end justify-content-center">
             <div class="col-md-4">
                 <label for="addDate" class="form-label">月份</label>
-                <input type="month" class="form-control" id="addDate" required min="2020-01" max="2025-12" />
+                <select id="addDate" class="form-select" required></select>
             </div>
             <div class="col-md-4">
                 <label for="addValue" class="form-label">價格（元／公斤）</label>
@@ -113,6 +113,29 @@
 </div>
 
 <script>
+    function populateMonthSelect(selectId) {
+        const select = document.getElementById(selectId);
+        const start = new Date(2020, 0); // 2020-01
+        const end = new Date(2025, 11); // 2025-12
+
+        while (start <= end) {
+            const year = start.getFullYear();
+            const month = String(start.getMonth() + 1).padStart(2, '0');
+            const value = `${year}-${month}`;
+            const label = `${year} 年 ${month} 月`;
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+            start.setMonth(start.getMonth() + 1);
+        }
+    }
+
+    // 初始化月份下拉選單
+    populateMonthSelect('start');
+    populateMonthSelect('end');
+    populateMonthSelect('addDate');
+
     const form = document.getElementById('queryForm');
     const addForm = document.getElementById('addForm');
     const resultList = document.getElementById('resultList');

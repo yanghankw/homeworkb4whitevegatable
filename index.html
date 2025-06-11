@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小白菜價格查詢系統</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" />
+    <style>
+        body {
+            background-color: #eef6f1;
+            font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+        }
+        h1, h4 {
+            font-weight: 700;
+        }
+        .card {
+            border: none;
+            border-radius: 1rem;
+        }
+        .form-label {
+            font-weight: 500;
+        }
+        .btn {
+            border-radius: 0.5rem;
+        }
+        .btn-success, .btn-primary {
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        #resultList {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .page-link {
+            border-radius: 0.4rem !important;
+        }
+        #pagination .form-control {
+            display: inline-block;
+            width: auto;
+            height: 30px;
+            padding: 0 6px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container py-5">
+    <h1 class="mb-5 text-center text-success">🥬 小白菜價格查詢系統</h1>
+
+    <!-- 查詢表單 -->
+    <div class="card p-4 shadow-sm mb-4 bg-white">
+        <form id="queryForm" class="row g-3 align-items-end justify-content-center">
+            <div class="col-md-4">
+                <label for="start" class="form-label">開始月份</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
+                    <input type="month" class="form-control" id="start" required min="2020-01" max="2025-12" />
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label for="end" class="form-label">結束月份</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-light"><i class="bi bi-calendar-event"></i></span>
+                    <input type="month" class="form-control" id="end" required min="2020-01" max="2025-12" />
+                </div>
+            </div>
+            <div class="col-md-3 text-center">
+                <button type="submit" class="btn btn-success px-4 py-2">查詢價格</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 新增表單 -->
+    <div class="card p-4 shadow-sm mb-5 bg-white">
+        <h4 class="text-success mb-3">➕ 新增小白菜價格資料</h4>
+        <form id="addForm" class="row g-3 align-items-end justify-content-center">
+            <div class="col-md-4">
+                <label for="addDate" class="form-label">月份</label>
+                <input type="month" class="form-control" id="addDate" required min="2020-01" max="2025-12" />
+            </div>
+            <div class="col-md-4">
+                <label for="addValue" class="form-label">價格（元／公斤）</label>
+                <input type="number" class="form-control" id="addValue" step="0.01" required />
+            </div>
+            <div class="col-md-3 text-center">
+                <button type="submit" class="btn btn-primary px-4 py-2">新增資料</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 查詢結果與圖表 -->
+    <div class="card p-4 shadow-sm bg-white">
+        <h4 class="mb-4 text-success">查詢結果（單位：元／公斤）</h4>
+        <div class="row">
+            <div class="col-lg-7 col-md-12 mb-4 mb-lg-0">
+                <div class="chart-container">
+                    <canvas id="lineChart"></canvas>
+                </div>
+            </div>
+            <div class="col-lg-5 col-md-12">
+                <ul id="resultList" class="list-group mb-3"></ul>
+                <div id="pagination"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('queryForm');
+    const addForm = document.getElementById('addForm');
+    const resultList = document.getElementById('resultList');
+    const ctx = document.getElementById('lineChart').getContext('2d');
+    let chart = null;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const start = document.getElementById('start').value;
+        const end = document.getElementById('end').value;
+        if (start < '2020-01' || end > '2025-12') {
+            alert('僅能查詢 2020-01 ~ 2025-12 之間的資料');
+            return;
+        }
+
+        const res = await fetch(`http://localhost:3000/api/data?start=${start}&end=${end}`);
+        const data = await res.json();
+
+        const pageSize = 8;
+        let currentPage = 1;
+        let totalPages = Math.ceil(data.length / pageSize);
+
+        function renderPage(page) {
+            resultList.innerHTML = '';
+            const startIdx = (page - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, data.length);
+            for (let i = startIdx; i < endIdx; i++) {
+                const item = data[i];
+                const li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center';
+                li.innerHTML = `<strong>${item.date}</strong><span>${item.value} 元／公斤</span>`;
+                resultList.appendChild(li);
+            }
+        }
+
+        function updateChart() {
+            const labels = data.map(item => item.date);
+            const values = data.map(item => item.value);
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: '小白菜每月平均價格（元／公斤）',
+                        data: values,
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 4,
+                        pointBackgroundColor: '#28a745'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: '價格（元）'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: '月份'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            if (totalPages <= 1) return;
+            const ul = document.createElement('ul');
+            ul.className = 'pagination justify-content-center flex-wrap';
+            for (let i = 1; i <= totalPages; i++) {
+                const li = document.createElement('li');
+                li.className = 'page-item' + (i === currentPage ? ' active' : '');
+                const btn = document.createElement('button');
+                btn.className = 'page-link';
+                btn.textContent = i;
+                btn.onclick = () => onPageChange(i);
+                li.appendChild(btn);
+                ul.appendChild(li);
+            }
+            pagination.appendChild(ul);
+
+            const jumpDiv = document.createElement('div');
+            jumpDiv.className = 'text-center mt-2';
+            jumpDiv.innerHTML = `
+                <span>跳轉到第</span>
+                <input id="jumpPage" type="number" min="1" max="${totalPages}" value="${currentPage}" class="form-control d-inline-block" style="width: 60px;" />
+                <span>頁</span>
+                <button id="jumpBtn" class="btn btn-sm btn-outline-success ms-2">Go</button>`;
+            pagination.appendChild(jumpDiv);
+
+            setTimeout(() => {
+                document.getElementById('jumpBtn').onclick = () => {
+                    const val = parseInt(document.getElementById('jumpPage').value);
+                    if (val >= 1 && val <= totalPages) {
+                        onPageChange(val);
+                    }
+                };
+            }, 0);
+        }
+
+        function onPageChange(page) {
+            currentPage = page;
+            renderPage(page);
+            renderPagination();
+        }
+
+        renderPage(currentPage);
+        renderPagination();
+        updateChart();
+    });
+
+    addForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const date = document.getElementById('addDate').value;
+        if (date < '2020-01' || date > '2025-12') {
+            alert('僅能新增 2020-01 ~ 2025-12 之間的資料');
+            return;
+        }
+
+        const value = parseFloat(document.getElementById('addValue').value);
+
+        const res = await fetch('http://localhost:3000/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date, value }),
+        });
+
+        const result = await res.json();
+
+        if (res.ok) {
+            alert('✅ 新增成功！');
+            addForm.reset();
+        } else {
+            alert('❌ 新增失敗：' + (result.error || '請再試一次'));
+        }
+    });
+</script>
+</body>
+</html>
